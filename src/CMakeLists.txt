@@ -12,21 +12,21 @@ target_sources(lua
     lcode.c
     lcorolib.c
     lctype.c
-    ldblib.c
+    # ldblib.c              # REMOVED: debug library not used
     ldebug.c
     ldo.c
     ldump.c
     lfunc.c
     lgc.c
-    linit.c
-    liolib.c
+    linit_crow.c            # CUSTOM: minimal library set for crow
+    # liolib.c              # REMOVED: io library not used
     llex.c
     lmathlib.c
     lmem.c
     loadlib.c
     lobject.c
     lopcodes.c
-    loslib.c
+    # loslib.c              # REMOVED: os library not used
     lparser.c
     lstate.c
     lstring.c
@@ -35,7 +35,7 @@ target_sources(lua
     ltablib.c
     ltm.c
     lundump.c
-    lutf8lib.c
+    # lutf8lib.c            # REMOVED: utf8 library not used
     lvm.c
     lzio.c
 )
