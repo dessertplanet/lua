@@ -673,10 +673,42 @@ static lu_mem propagatemark (global_State *g) {
 }
 
 
+/*
+** An optional callback, called regularly while the collector works, so an
+** embedding can do time-critical work during a long collection (the atomic
+** phase can't be split into steps). It runs in the middle of a collection:
+** it must not use the Lua state.
+*/
+static void (*gcinterrupt) (void) = NULL;
+
+#define GCINTERRUPTEVERY	32  /* objects marked between calls */
+
+LUA_API void lua_setgcinterrupt (void (*f) (void)) {
+  gcinterrupt = f;
+}
+
+/* after each object marked: every GCINTERRUPTEVERY objects */
+static void gcpoll (void) {
+  static int n = 0;
+  if (gcinterrupt != NULL && ++n >= GCINTERRUPTEVERY) {
+    n = 0;
+    gcinterrupt();
+  }
+}
+
+/* after each step (which can be a sweep of up to GCSWEEPMAX objects) */
+static void gcpollstep (void) {
+  if (gcinterrupt != NULL)
+    gcinterrupt();
+}
+
+
 static lu_mem propagateall (global_State *g) {
   lu_mem tot = 0;
-  while (g->gray)
+  while (g->gray) {
     tot += propagatemark(g);
+    gcpoll();
+  }
   return tot;
 }
 
@@ -1651,8 +1683,10 @@ static lu_mem singlestep (lua_State *L) {
 */
 void luaC_runtilstate (lua_State *L, int statesmask) {
   global_State *g = G(L);
-  while (!testbit(statesmask, g->gcstate))
+  while (!testbit(statesmask, g->gcstate)) {
     singlestep(L);
+    gcpollstep();
+  }
 }
 
 
@@ -1673,6 +1707,7 @@ static void incstep (lua_State *L, global_State *g) {
   do {  /* repeat until pause or enough "credit" (negative debt) */
     lu_mem work = singlestep(L);  /* perform one single step */
     debt -= work;
+    gcpollstep();
   } while (debt > -stepsize && g->gcstate != GCSpause);
   if (g->gcstate == GCSpause)
     setpause(g);  /* pause until next cycle */
