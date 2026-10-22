@@ -341,6 +341,8 @@ LUA_API void (lua_warning)  (lua_State *L, const char *msg, int tocont);
 
 LUA_API int (lua_gc) (lua_State *L, int what, ...);
 LUA_API void (lua_setgcinterrupt) (void (*f) (void));  /* see lgc.c */
+LUA_API void (lua_setinterrupt) (void (*f) (void));  /* see lvm.c */
+extern volatile int lua_interrupt_pending;  /* see lvm.c */
 
 
 /*

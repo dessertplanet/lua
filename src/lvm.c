@@ -32,6 +32,26 @@
 
 
 /*
+** An embedding's interrupt: setting 'lua_interrupt_pending' (from anywhere:
+** an interrupt handler, another core) makes the VM call the function set by
+** lua_setinterrupt at its next call, jump or loop back-edge. Much cheaper
+** than a count hook, which makes the VM trace every instruction. The
+** function runs in the middle of the VM: it must not use the Lua state.
+*/
+volatile int lua_interrupt_pending = 0;
+static void (*interruptfn) (void) = NULL;
+
+LUA_API void lua_setinterrupt (void (*f) (void)) {
+  interruptfn = f;
+}
+
+#define checkinterrupt()  \
+  { if (l_unlikely(lua_interrupt_pending)) {  \
+      lua_interrupt_pending = 0;  \
+      if (interruptfn != NULL) interruptfn(); } }
+
+
+/*
 ** By default, use jump tables in the main interpreter loop on gcc
 ** and compatible compilers.
 */
@@ -1601,6 +1621,7 @@ void luaV_execute (lua_State *L, CallInfo *ci) {
       }
       vmcase(OP_JMP) {
         dojump(ci, i, 0);
+        checkinterrupt();
         vmbreak;
       }
       vmcase(OP_EQ) {
@@ -1682,6 +1703,7 @@ void luaV_execute (lua_State *L, CallInfo *ci) {
           L->top.p = ra + b;  /* top signals number of arguments */
         /* else previous instruction set top */
         savepc(L);  /* in case of errors */
+        checkinterrupt();
         if ((newci = luaD_precall(L, ra, nresults)) == NULL)
           updatetrap(ci);  /* C call; nothing else to be done */
         else {  /* Lua call: run function in this same C frame */
@@ -1691,6 +1713,7 @@ void luaV_execute (lua_State *L, CallInfo *ci) {
         vmbreak;
       }
       vmcase(OP_TAILCALL) {
+        checkinterrupt();
         StkId ra = RA(i);
         int b = GETARG_B(i);  /* number of arguments + 1 (function) */
         int n;  /* number of results when calling a C function */
@@ -1801,6 +1824,7 @@ void luaV_execute (lua_State *L, CallInfo *ci) {
         else if (floatforloop(ra))  /* float loop */
           pc -= GETARG_Bx(i);  /* jump back */
         updatetrap(ci);  /* allows a signal to break the loop */
+        checkinterrupt();
         vmbreak;
       }
       vmcase(OP_FORPREP) {
@@ -1843,6 +1867,7 @@ void luaV_execute (lua_State *L, CallInfo *ci) {
           setobjs2s(L, ra + 2, ra + 4);  /* save control variable */
           pc -= GETARG_Bx(i);  /* jump back */
         }
+        checkinterrupt();
         vmbreak;
       }}
       vmcase(OP_SETLIST) {
